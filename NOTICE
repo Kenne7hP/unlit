@@ -1,0 +1,17 @@
+Unlit·息幕 (formerly FoldGuard)
+
+Display-control loading in DisplayPower.java is adapted from Extinguish.
+Extinguish — Copyright (C) 2024 Moderpach.
+https://github.com/Moderpach/Extinguish
+
+Unlit modifications: Copyright (C) 2026 Unlit contributors.
+Distributed under GNU GPL version 3 or (at your option) any later version.
+The original upstream license/copyright text is retained in LICENSE.
+This is an independent derivative implementation; no upstream endorsement is implied.
+
+Shizuku API/provider — Copyright (c) 2021 RikkaW.
+https://github.com/RikkaApps/Shizuku-API
+MIT license retained in LICENSE-Shizuku.
+
+Linux evdev, AOSP and scrcpy were consulted as references. No implementation from
+those references was copied. See SOURCES.md for the adapted code and reference scope.
