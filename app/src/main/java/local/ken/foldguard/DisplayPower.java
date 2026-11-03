@@ -20,12 +20,13 @@ final class DisplayPower {
     private IBinder savedToken;
     private String savedAddress;
     // Lint models a zygote app process here; this code only runs in Shizuku's standalone
-    // app_process shell service. ART's default non-zygote hidden-api policy is disabled.
+    // standalone root/shell service. ART's default non-zygote hidden-api policy is disabled.
     // No hidden-api exemptions, target-SDK downgrades or system policy changes are applied.
     // Reference implementation: scrcpy server/wrappers/DisplayControl.java; see SOURCES.md.
     @SuppressLint("BlockedPrivateApi")
     DisplayPower(Context context) throws Exception {
-        if (android.os.Process.myUid() != 2000) throw new SecurityException("Display control requires the Shizuku shell process");
+        int uid = android.os.Process.myUid();
+        if (uid != 0 && uid != 2000) throw new SecurityException("Display control requires the Sui root or Shizuku shell service");
         manager = context.getSystemService(DisplayManager.class);
         Class<?> factory = Class.forName("com.android.internal.os.ClassLoaderFactory");
         Method create = factory.getDeclaredMethod("createClassLoader", String.class, String.class,

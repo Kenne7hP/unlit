@@ -251,7 +251,8 @@ public final class GuardService extends Service {
     }
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
-        if (active || starting) restoreSession("屏幕布局变化，已恢复");
+        // Rotation only changes layout. The privileged controller detects physical
+        // display switches and power-state changes independently of configuration callbacks.
         if (floating != null) floating.reposition();
     }
     @Override public void onDestroy() {

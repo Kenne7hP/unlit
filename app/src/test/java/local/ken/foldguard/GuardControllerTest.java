@@ -105,6 +105,32 @@ public class GuardControllerTest {
         c.begin(false); d.changed = true; c.tick(); assertFalse(d.dark);
         d.changed = false; assertEquals("OK", c.begin(false)); assertTrue(d.dark);
     }
+    @Test public void unchangedPhysicalDisplayKeepsProtectionUntilDoubleRestore() {
+        FakeDevice d = new FakeDevice(); GuardController c = ready(d); c.begin(false);
+        for (int i = 0; i < 100; i++) {
+            d.time += 20;
+            assertTrue(c.tick());
+            assertEquals("GUARD_RUNNING", c.heartbeat());
+            assertTrue(d.dark); assertTrue(d.grabbed);
+        }
+        assertEquals(0, d.restoreCount);
+        d.press(c); d.press(c);
+        assertFalse(d.dark); assertFalse(d.grabbed);
+        assertEquals(1, d.restoreCount);
+    }
+    @Test public void physicalDisplaySwitchStillReleasesTouchAndRearmsShortcut() {
+        FakeDevice d = new FakeDevice(); GuardController c = ready(d); c.begin(false);
+        d.changed = true;
+        assertTrue(c.tick());
+        assertEquals("显示状态变化，已退出", c.heartbeat());
+        assertFalse(d.dark); assertFalse(d.grabbed);
+        assertEquals(1, d.restoreCount);
+        d.changed = false;
+        d.press(c); d.press(c); d.press(c);
+        assertEquals("KEY_START", c.heartbeat());
+        assertEquals("OK", c.begin(false));
+        assertTrue(d.dark); assertTrue(d.grabbed);
+    }
     @Test public void repeatedStopIsSafeAndDoesNotLeavePartialGesture() {
         FakeDevice d = new FakeDevice(); GuardController c = ready(d);
         d.press(c); d.press(c); c.stop(); c.stop();

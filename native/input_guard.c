@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/system_properties.h>
+#include "input_profile.h"
 
 #define MAX_DEVICES 64
 #define BIT_WORDS(n) (((n) + 8 * sizeof(unsigned long) - 1) / (8 * sizeof(unsigned long)))
@@ -60,6 +62,10 @@ static jstring open_inputs(JNIEnv *env, int keys_only, int probe) {
     pthread_mutex_lock(&lock);
     close_all();
     char error[256] = "", path[256], name[128];
+    char model[PROP_VALUE_MAX] = "";
+    __system_property_get("ro.product.model", model);
+    enum input_profile profile = profile_for_model(model);
+    int expected_touches = keys_only ? 0 : profile_touch_count(profile);
     int touches = 0, volume = 0, power = 0;
     DIR *dir = opendir("/dev/input");
     if (!dir) snprintf(error, sizeof(error), "无法读取输入设备：%s", strerror(errno));
@@ -74,8 +80,11 @@ static jstring open_inputs(JNIEnv *env, int keys_only, int probe) {
         ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name);
         ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keys)), keys);
         ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(abs)), abs);
-        int is_touch = !keys_only && (!strcmp(name, "sec_touchscreen") || !strcmp(name, "sec_touchscreen2"))
-                && HAS(abs, ABS_MT_POSITION_X) && HAS(abs, ABS_MT_POSITION_Y) && HAS(keys, BTN_TOUCH);
+        unsigned long props[BIT_WORDS(INPUT_PROP_MAX + 1)] = {0};
+        ioctl(fd, EVIOCGPROP(sizeof(props)), props);
+        int is_touch = !keys_only && profile_is_touch(profile, name,
+                HAS(abs, ABS_MT_POSITION_X), HAS(abs, ABS_MT_POSITION_Y), HAS(keys, BTN_TOUCH),
+                HAS(props, INPUT_PROP_DIRECT));
         int has_volume = HAS(keys, KEY_VOLUMEDOWN), has_power = HAS(keys, KEY_POWER);
         if ((!is_touch && !has_volume && !has_power) || count >= MAX_DEVICES) { close(fd); continue; }
         int clock_id = CLOCK_MONOTONIC;
@@ -87,8 +96,8 @@ static jstring open_inputs(JNIEnv *env, int keys_only, int probe) {
         touches += is_touch; volume |= has_volume; power |= has_power;
     }
     if (dir) closedir(dir);
-    if (!error[0] && ((!keys_only && touches != 2) || !volume || !power))
-        snprintf(error, sizeof(error), "设备检查失败：触控屏=%d/2，音量下键=%d，电源键=%d", touches, volume, power);
+    if (!error[0] && (touches != expected_touches || !volume || !power))
+        snprintf(error, sizeof(error), "设备检查失败：触控屏=%d/%d，音量下键=%d，电源键=%d", touches, expected_touches, volume, power);
     if (!error[0] && fingers_down()) snprintf(error, sizeof(error), "请先移开屏幕上的手指，再重试");
     if (!error[0]) for (int i = 0; i < count; ++i) if (touch[i]) {
         if (ioctl(devices[i].fd, EVIOCGRAB, 1) < 0) {

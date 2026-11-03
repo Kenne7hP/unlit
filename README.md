@@ -1,8 +1,8 @@
 # Unlit·息幕
 
-Keep the app running. Let the screen rest.
+Unlit is an experimental Android screen-off touch guard for compatible Samsung foldables and Lenovo Y700 TB321FU tablets. It uses a Shizuku shell service or an existing Sui root service to control the active physical display and Linux input ownership to block real touchscreen input.
 
-Unlit is an experimental Android screen-off touch guard for compatible Samsung foldables. It uses a Shizuku shell service to control the active physical display and Linux input ownership to block real touchscreen input. It does not request internet, account or storage permissions.
+Current preview is **v0.4.5-preview**, version code 11. Installation packages and matching source are available on the [release page](https://github.com/Kenne7hP/unlit/releases/tag/v0.4.5-preview).
 
 > **Credit to [Extinguish](https://github.com/Moderpach/Extinguish) by Moderpach.** Unlit's display-control class-loader and native-library loading implementation is adapted from Extinguish. Its screen-off workflow also informed this project. The original copyright and GPL license are retained. Unlit is independently maintained and is not an official Extinguish release.
 
@@ -14,15 +14,21 @@ Unlit is an experimental Android screen-off touch guard for compatible Samsung f
 - Consecutive completed short presses must be no more than 500 ms apart. Long presses and autorepeat do not count. System volume behavior stays active.
 - Tap the draggable shield or Quick Settings tile to start; the app and notification also provide screen and service controls.
 - The shield hides during the hand-off and protection, then returns on restoration. Stopping the service restores the screen and removes both the shield and key listener.
+- Ordinary screen rotation and layout configuration callbacks keep the countdown and protection active. Physical panel switches and logical display-power changes end screen-off protection.
 
 ## Compatibility and first use
 
-This is a device-specific preview, not a general Android screen-off solution. The current input discovery expects both `sec_touchscreen` and `sec_touchscreen2` with multitouch capability. It requires arm64, Android 14 or later, Shizuku 13 or later running as shell, and a system that allows shell access to those input devices and display interfaces. Compatibility can vary by firmware. Root and security-policy modifications are not used.
+The supported input profiles require arm64, Android 14 or later, Shizuku 13 or later or an existing compatible Sui service, and access to the input devices and display interfaces. Compatibility depends on firmware.
 
-1. Start Shizuku and authorize Unlit. Allow notifications and the app's overlay permission.
+- Samsung dual-screen profile requires both `sec_touchscreen` and `sec_touchscreen2` with multitouch/contact capability.
+- Lenovo TB321FU single-screen profile requires `NVTCapacitiveTouchScreen` with multitouch axes, contact and direct-touch properties. Its separate pen device is excluded. Other Y700 models need their own compatibility verification.
+
+Discovery uses device names and capabilities. Display control accepts shell UID (user identifier) 2000 or root UID 0 within the privileged service and checks the calling application separately. The included Shizuku provider automatically selects existing Sui where available. The app uses existing permissions and services, with no root module installation or security-policy changes.
+
+1. Start Shizuku or use your existing Sui service and authorize Unlit. Allow notifications and the app's overlay permission.
 2. Stop any other active display-control app, including Extinguish, before testing.
-3. Open **权限与触控检查** and run the ten-second screen-on touch test on a harmless screen. On both inner and outer panels, physically test taps, swipes, edge gestures, automatic release, and double-Volume-Down cancellation.
-4. Confirm only after both panels actually pass. Formal screen-off stays gated on this confirmation. An injected Android gesture or successful build does not prove physical touch ownership.
+3. Open **权限与触控检查** and run the ten-second screen-on touch test on a harmless screen. Physically test taps, swipes, edge gestures, automatic release, and double-Volume-Down cancellation. Test both panels on Samsung or the single screen on TB321FU.
+4. After successful testing, use **确认通过并启用** to record your confirmation and enable the floating control. Formal screen-off stays gated on this confirmation. A completed probe prompts for explicit confirmation. Physical acceptance requires real finger testing.
 5. Enable the service and use the floating button or volume shortcuts. If the system denies ownership, Unlit reports the error; it does not fall back to a black overlay.
 
 The original application identity `local.ken.foldguard` is intentionally retained for upgrades from FoldGuard. The visible project/app name is now **Unlit·息幕**.
@@ -33,7 +39,7 @@ The original application identity `local.ken.foldguard` is intentionally retaine
 - The screen-on probe releases input after ten seconds. Two short Volume Down presses cancel it early.
 - The app sends frequent heartbeats; five seconds of lost heartbeat ends protection. An independent native watchdog releases input ownership. Process termination also releases kernel input ownership.
 - Protection holds a renewable fifteen-second wake-lock lease. It does not restart automatically after reboot, revoked permission or process loss.
-- Display/fold changes end the current session. System lock stops the service. Recovery on every possible firmware/fold state is not guaranteed.
+- Physical display switches and logical power-state changes end screen-off protection. System lock stops the service. Ordinary rotation keeps the current protection session active. The display-on probe keeps its ten-second limit.
 - External mouse/controller input and automation injection are outside the physical touchscreen guarantee.
 
 ## Build
@@ -58,7 +64,9 @@ The debug build uses your local Android debug signing identity. No signing key i
 
 ## Validation status
 
-Version 0.4.0 passed twenty local tests and repeated on-device restore/restart and full stop/re-enable checks. Its tester also reported repeated physical three-press start/two-press restore working. Version 0.4.1 corrected potential floating-window retention before initial attachment; version 0.4.2 adopts the Unlit name and explicit attribution. These later visual changes have local verification, with on-device visual acceptance still pending. No broad device support or playback endurance claim is made.
+Version 0.4.5 passed 22 Java unit tests, native analysis, Android lint with zero errors, and package signature/permission/alignment checks. Its configuration callback only repositions the floating control. The existing controller continues to monitor actual physical-display changes. Physical Samsung rotation testing for this version is pending.
+
+The Samsung lifecycle and physical volume-key controls passed earlier device checks. On TB321FU, v0.4.4 passed user-reported touch blocking, restoration, three-press start/two-press restore and floating-control checks using existing Sui. Three device display cycles verified physical OFF/ON and shield hide/return. Thirteen synthetic native profile assertions also passed on the tablet. New physical Samsung testing after the profile changes is pending. Playback endurance, reboot survival, stylus blocking and broader device compatibility remain unverified.
 
 ## Source layout
 

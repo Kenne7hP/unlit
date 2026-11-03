@@ -15,6 +15,7 @@ import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import rikka.shizuku.Shizuku;
+import rikka.sui.Sui;
 
 public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -22,6 +23,7 @@ public final class MainActivity extends Activity {
     private Button confirm, power, protect, setupToggle;
     private LinearLayout setup;
     private int count;
+    private boolean singleScreen, offeredConfirmation;
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
             boolean binder = Shizuku.pingBinder();
@@ -29,7 +31,7 @@ public final class MainActivity extends Activity {
             SharedPreferences prefs = getSharedPreferences("guard", MODE_PRIVATE);
             boolean tested = GuardService.calibrationMatches(prefs.getString("probe", ""));
             boolean verified = GuardService.calibrationMatches(prefs.getString("confirmed", ""));
-            checks.setText("Shizuku：" + (permission ? "已授权" : binder ? "待授权" : "未运行")
+            checks.setText((Sui.isSui() ? "Sui（root）：" : "Shizuku：") + (permission ? "已授权" : binder ? "待授权" : "未运行")
                     + "\n持续运行权限：" + (Settings.canDrawOverlays(MainActivity.this) ? "已允许" : "待允许")
                     + "\n手指触控验证：" + (verified ? "已由你确认" : tested ? "等待你确认" : "待测试"));
             badge.setText(GuardService.active ? "●  保护中" : GuardService.starting ? "●  准备灭屏" : GuardService.enabled ? "●  服务就绪" : GuardService.connecting ? "●  正在连接" : "○  待启用");
@@ -44,11 +46,16 @@ public final class MainActivity extends Activity {
             protect.setEnabled(GuardService.enabled && verified);
             confirm.setEnabled(tested && !GuardService.active && !GuardService.starting);
             confirm.setAlpha(confirm.isEnabled() ? 1f : 0.45f);
+            if (tested && !verified && !GuardService.active && !GuardService.starting && !offeredConfirmation) {
+                offeredConfirmation = true;
+                confirmProbe();
+            }
             handler.postDelayed(this, 750);
         }
     };
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        singleScreen = "TB321FU".equals(Build.MODEL);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xFFF3F5F2);
         scroll.setFillViewport(true);
@@ -110,12 +117,13 @@ public final class MainActivity extends Activity {
         setup.setVisibility(verified ? View.GONE : View.VISIBLE);
         setupToggle.setText(verified ? "权限与触控检查  ＋" : "权限与触控检查  −");
         checks = text(setup, "正在检查权限…");
-        button(setup, "1. 授权 Shizuku", () -> {
-            if (!Shizuku.pingBinder()) { Toast.makeText(this, "请先在 Shizuku 中启动服务", Toast.LENGTH_LONG).show(); return; }
+        button(setup, Sui.isSui() ? "1. 授权 Sui" : "1. 授权 Shizuku", () -> {
+            if (!Shizuku.pingBinder()) { Toast.makeText(this, "请先启动 Sui 或 Shizuku 权限服务", Toast.LENGTH_LONG).show(); return; }
             Shizuku.requestPermission(100);
         });
         button(setup, "2. 允许悬浮按钮", () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
-        text(setup, "首次使用请完成双屏触控检查；使用 Unlit·息幕 时请停止 Extinguish 的活动控制。");
+        text(setup, (singleScreen ? "本机为单屏，请完成本屏触控检查。" : "本机为双屏，请分别完成内外屏触控检查。")
+                + "使用 Unlit·息幕 时请停止 Extinguish 的活动控制。");
         TextView pad = text(setup, "触控测试区：点击或滑动\n事件计数：0");
         pad.setMinHeight(dp(132)); pad.setPadding(dp(16), dp(20), dp(16), dp(20));
         pad.setBackground(shape(0xFFEAF3ED, 16));
@@ -126,14 +134,11 @@ public final class MainActivity extends Activity {
             return true;
         });
         button(setup, "3. 亮屏独占测试（10 秒）", () -> {
+            offeredConfirmation = false;
             getSharedPreferences("guard", MODE_PRIVATE).edit().remove("probe").remove("confirmed").apply();
             action("PROBE");
         });
-        confirm = button(setup, "4. 确认手指和边缘操作均被屏蔽", () -> new AlertDialog.Builder(this)
-                .setTitle("确认实测结果")
-                .setMessage("只有 10 秒测试期间手指点击、滑动及系统边缘手势均无效，结束后正常恢复，且双击音量下键能提前退出测试，才选择通过。内屏、外屏均须分别验证。")
-                .setNegativeButton("未通过", (d, w) -> getSharedPreferences("guard", MODE_PRIVATE).edit().remove("confirmed").apply())
-                .setPositiveButton("两块屏幕均已实测通过", (d, w) -> getSharedPreferences("guard", MODE_PRIVATE).edit().putString("confirmed", GuardService.deviceKey()).apply()).show());
+        confirm = button(setup, "4. 确认触控通过并启用", this::confirmProbe);
         button(setup, "添加快捷设置磁贴", () -> {
             getSystemService(StatusBarManager.class).requestAddTileService(
                     new ComponentName(this, GuardTile.class), getString(R.string.app_name), android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_guard),
@@ -150,6 +155,17 @@ public final class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private void confirmProbe() {
+        new AlertDialog.Builder(this)
+                .setTitle(singleScreen ? "本屏幕触控测试是否通过？" : "内外屏触控测试是否均通过？")
+                .setMessage("亮屏测试不会灭屏。只有测试期间手指点击、滑动和边缘手势均无效，结束后恢复正常，且双击音量下键能提前退出，才确认通过。"
+                        + (singleScreen ? "确认后启用服务并显示悬浮按钮。" : "内屏、外屏均须分别验证；确认后启用服务。"))
+                .setNegativeButton("未通过", (d, w) -> getSharedPreferences("guard", MODE_PRIVATE).edit().remove("confirmed").apply())
+                .setPositiveButton("确认通过并启用", (d, w) -> {
+                    getSharedPreferences("guard", MODE_PRIVATE).edit().putString("confirmed", GuardService.deviceKey()).apply();
+                    action("ENABLE");
+                }).show();
+    }
     private GradientDrawable shape(int color, int radius) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(color); background.setCornerRadius(dp(radius)); return background;
