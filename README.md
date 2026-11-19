@@ -2,7 +2,7 @@
 
 Unlit is an experimental Android screen-off touch guard for compatible Samsung foldables, the Samsung SM-G9860, and Lenovo Y700 TB321FU tablets. It uses a Shizuku shell service or an existing Sui root service to control the active physical display and Linux input ownership to block real touchscreen input.
 
-Current source version is **v0.4.9-preview**, version code 15. Published packages are listed under [Releases](https://github.com/Kenne7hP/unlit/releases).
+Current source version is **v0.5.2-y700-preview**, version code 18. Published packages are listed under [Releases](https://github.com/Kenne7hP/unlit/releases).
 
 > **Credit to [Extinguish](https://github.com/Moderpach/Extinguish) by Moderpach.** Unlit's display-control class-loader and native-library loading implementation is adapted from Extinguish. Its screen-off workflow also informed this project. The original copyright and GPL license are retained. Unlit is independently maintained and is not an official Extinguish release.
 
@@ -32,6 +32,18 @@ Discovery uses device names and capabilities. Display control accepts shell UID 
 4. Use the floating button or volume shortcuts. Each screen-off attempt requires successful touchscreen acquisition before the display turns off.
 
 The original application identity `local.ken.foldguard` is intentionally retained for upgrades from FoldGuard. The visible project/app name is now **Unlit·息幕**.
+
+## Y700 display settings
+
+On the Lenovo TB321FU, open **显示设置** with Shizuku or Sui authorized. For landscape mirroring with XREAL One Pro, tap a preset to start a 15-second trial.
+
+| Preset | Landscape logical resolution | Logical density |
+| --- | --- | --- |
+| 标准观看 | 1920 × 1080 | 280 DPI |
+| 大字阅读 | 1920 × 1080 | 340 DPI |
+| 高分辨率 | 2560 × 1440 | 375 DPI |
+
+Tap **保留** to keep the trial. **立即恢复** or the timeout restores the previous size and density. After disconnecting the glasses, tap **恢复系统默认** below the presets to clear both overrides in one step. Manual size, aspect-ratio lock, and density controls are also available. These controls change the tablet’s logical display settings. The external signal format depends on the device and display.
 
 ## Recovery
 

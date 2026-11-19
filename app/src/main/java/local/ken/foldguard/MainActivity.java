@@ -100,6 +100,8 @@ public final class MainActivity extends Activity {
         text(guide, "连续短按 · 每次间隔不超过 0.5 秒").setTextSize(14);
         TextView keys = text(guide, "三击 → 灭屏  /  双击 → 亮屏"); keys.setTextColor(0xFF21694F); keys.setTextSize(18); keys.setTypeface(null, Typeface.BOLD);
         text(guide, "恢复后可再次三击灭屏。停止服务会关闭按键监听。\n若未恢复：按电源键锁屏，再按一次唤醒。").setTextSize(13);
+        if ("TB321FU".equals(Build.MODEL))
+            button(body, "显示设置", () -> startActivity(new Intent(this, DisplaySettingsActivity.class)));
         setupToggle = button(body, "权限与触控检查  ＋", () -> {
             boolean show = setup.getVisibility() != View.VISIBLE;
             setup.setVisibility(show ? View.VISIBLE : View.GONE);
