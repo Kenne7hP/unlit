@@ -28,6 +28,14 @@ final class DisplayPower {
         int uid = android.os.Process.myUid();
         if (uid != 0 && uid != 2000) throw new SecurityException("Display control requires the Sui root or Shizuku shell service");
         manager = context.getSystemService(DisplayManager.class);
+        Class<?> surface = Class.forName("android.view.SurfaceControl");
+        if (android.os.Build.VERSION.SDK_INT < 34) {
+            // Android 13 exposes the physical-display token directly on SurfaceControl.
+            control = surface;
+            token = control.getMethod("getPhysicalDisplayToken", long.class);
+            power = surface.getMethod("setDisplayPowerMode", IBinder.class, int.class);
+            return;
+        }
         Class<?> factory = Class.forName("com.android.internal.os.ClassLoaderFactory");
         Method create = factory.getDeclaredMethod("createClassLoader", String.class, String.class,
                 String.class, ClassLoader.class, int.class, boolean.class, String.class);
@@ -38,7 +46,7 @@ final class DisplayPower {
         load.setAccessible(true);
         load.invoke(Runtime.getRuntime(), control, "android_servers");
         token = control.getMethod("getPhysicalDisplayToken", long.class);
-        power = Class.forName("android.view.SurfaceControl").getMethod("setDisplayPowerMode", IBinder.class, int.class);
+        power = surface.getMethod("setDisplayPowerMode", IBinder.class, int.class);
     }
     private Object address(Display display) throws Exception {
         return Display.class.getMethod("getAddress").invoke(display);

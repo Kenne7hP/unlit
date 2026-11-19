@@ -30,7 +30,7 @@ public class GuardControllerTest {
         void press(GuardController c) { event(c, 1); event(c, 2); }
     }
     private GuardController ready(FakeDevice d) {
-        GuardController c = new GuardController(d); assertEquals("READY", c.initialize()); c.arm(true); return c;
+        GuardController c = new GuardController(d); assertEquals("READY", c.initialize()); return c;
     }
     @Test public void idleObservesWithoutTouchGrabAndRequiresThreePresses() {
         FakeDevice d = new FakeDevice(); GuardController c = ready(d);
@@ -39,11 +39,10 @@ public class GuardControllerTest {
         d.press(c); assertEquals("KEY_START", c.heartbeat());
         assertNotEquals("KEY_START", c.heartbeat()); // each request delivered once
     }
-    @Test public void unconfirmedGateBlocksShortcutAndFormalStartButAllowsProbe() {
-        FakeDevice d = new FakeDevice(); GuardController c = ready(d); c.arm(false);
-        d.press(c); d.press(c); d.press(c); assertNotEquals("KEY_START", c.heartbeat());
-        assertNotEquals("OK", c.begin(false)); assertFalse(d.grabbed);
-        assertEquals("OK", c.begin(true)); assertFalse(d.dark); assertTrue(d.grabbed);
+    @Test public void freshControllerCanStartWithoutAnyProbe() {
+        FakeDevice d = new FakeDevice(); GuardController c = ready(d);
+        assertEquals("OK", c.begin(false));
+        assertTrue(d.grabbed); assertTrue(d.dark);
     }
     @Test public void doubleRestoreThenTripleStartAcrossRepeatedSessions() {
         FakeDevice d = new FakeDevice(); GuardController c = ready(d);

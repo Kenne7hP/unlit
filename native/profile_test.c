@@ -16,6 +16,16 @@ int main(void) {
     assert(profile_is_touch(SAMSUNG_DUAL, "sec_touchscreen", 1, 1, 1, 0));
     assert(profile_is_touch(SAMSUNG_DUAL, "sec_touchscreen2", 1, 1, 1, 0));
     assert(!profile_is_touch(SAMSUNG_DUAL, "NVTCapacitiveTouchScreen", 1, 1, 1, 1));
-    puts("PASS: 13 profile/capability assertions; no input devices opened");
+    assert(profile_for_model("SM-G9860") == S20_SINGLE);
+    assert(profile_touch_count(S20_SINGLE) == 1);
+    assert(profile_for_model("SM-G986B") == SAMSUNG_DUAL);
+    assert(profile_is_touch(S20_SINGLE, "sec_touchscreen", 1, 1, 1, 1));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchpad", 1, 1, 1, 0));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchpad", 1, 1, 1, 1));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchscreen2", 1, 1, 1, 1));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchscreen", 1, 1, 1, 0));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchscreen", 1, 0, 1, 1));
+    assert(!profile_is_touch(S20_SINGLE, "sec_touchscreen", 1, 1, 0, 1));
+    puts("PASS: 23 profile/capability assertions; no input devices opened");
     return 0;
 }

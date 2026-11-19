@@ -16,7 +16,7 @@ final class GuardController {
     }
     private final Device device;
     private final DoublePress startKeys = new DoublePress(3), restoreKeys = new DoublePress();
-    private boolean alive, running, probe, armed;
+    private boolean alive, running, probe;
     private long lastBeat, started;
     private String status = "未初始化";
 
@@ -28,15 +28,9 @@ final class GuardController {
         if (!error.isEmpty()) { close(); return status = "按键监听失败：" + error; }
         return status = "READY";
     }
-    synchronized void arm(boolean value) {
-        armed = value;
-        startKeys.reset();
-        if ("KEY_START".equals(status)) status = "KEYS_RUNNING";
-    }
     synchronized String begin(boolean test) {
         if (!alive) return "控制器已退出，请停止服务后重新启用";
         if (running) return "已有会话正在运行";
-        if (!test && !armed) return "尚未确认触控测试";
         startKeys.reset(); restoreKeys.reset();
         device.close();
         try {
@@ -62,7 +56,7 @@ final class GuardController {
         return result;
     }
     synchronized String stop() { recover("已恢复"); return status; }
-    synchronized void close() { alive = false; armed = false; recover("服务退出"); }
+    synchronized void close() { alive = false; recover("服务退出"); }
 
     synchronized boolean tick() {
         if (!alive) return false;
@@ -84,7 +78,7 @@ final class GuardController {
                 int value = event == 1 ? 1 : event == 2 ? 0 : 2;
                 if (running) {
                     if (restoreKeys.event(value, when)) recover("双击音量下键恢复");
-                } else if (armed && startKeys.event(value, when)) {
+                } else if (startKeys.event(value, when)) {
                     status = "KEY_START";
                 }
             }

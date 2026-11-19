@@ -37,7 +37,6 @@ public final class GuardService extends Service {
                     try {
                         String result = remote.initialize(getApplicationInfo().nativeLibraryDir + "/libfoldguard.so");
                         if (!"READY".equals(result)) { finishSession(result); return; }
-                        remote.setArmed(calibrationMatches(preferences().getString("confirmed", "")));
                         connecting = false; enabled = true;
                         status = "服务已启用；三击音量下键灭屏，双击恢复";
                         handler.removeCallbacks(pulse); handler.post(pulse);
@@ -71,8 +70,7 @@ public final class GuardService extends Service {
                 if (active && remotelyRunning && wakeLock != null) wakeLock.acquire(15000);
                 if (active && !remotelyRunning) {
                     if ("PROBE_PASSED".equals(result)) {
-                        preferences().edit().putString("probe", deviceKey()).apply();
-                        result = "10 秒测试完成；请确认实际手指触控确已被屏蔽";
+                        result = "10 秒亮屏测试已结束";
                     }
                     status = result;
                     active = false;
@@ -81,7 +79,6 @@ public final class GuardService extends Service {
                     notifyState();
                 }
                 if ("KEY_START".equals(result) && enabled && !active && !starting
-                        && calibrationMatches(preferences().getString("confirmed", ""))
                         && !getSystemService(KeyguardManager.class).isKeyguardLocked()) {
                     pending = "START";
                     beginPending();
@@ -91,13 +88,6 @@ public final class GuardService extends Service {
             } catch (Exception e) { finishSession("服务中断；若未亮屏请按电源键"); }
         }
     };
-    // UI releases do not invalidate the unchanged, previously tested input protocol.
-    static String deviceKey() { return Build.FINGERPRINT + ":touch-v1"; }
-    static boolean calibrationMatches(String value) {
-        return deviceKey().equals(value) || (Build.FINGERPRINT + ":1").equals(value)
-                || (Build.FINGERPRINT + ":2").equals(value);
-    }
-    private SharedPreferences preferences() { return getSharedPreferences("guard", MODE_PRIVATE); }
     @Override public void onCreate() {
         super.onCreate();
         active = enabled = connecting = starting = false;
@@ -123,9 +113,6 @@ public final class GuardService extends Service {
         } catch (ForegroundServiceStartNotAllowedException | SecurityException error) {
             finishSession("后台启动被系统拒绝，请从 Unlit·息幕 磁贴或主界面开始");
             return START_NOT_STICKY;
-        }
-        if (("START".equals(action) || "ENABLE".equals(action)) && !calibrationMatches(preferences().getString("confirmed", ""))) {
-            finishSession("请先完成亮屏触控测试并确认结果"); return START_NOT_STICKY;
         }
         if (!Settings.canDrawOverlays(this)) {
             finishSession("请先允许悬浮窗，以保持当前应用持续运行"); return START_NOT_STICKY;
@@ -164,7 +151,6 @@ public final class GuardService extends Service {
             if (ending || remote == null || active) return;
             try {
                 acquireKeeper();
-                remote.setArmed(calibrationMatches(preferences().getString("confirmed", "")));
                 String result = remote.begin("PROBE".equals(action));
                 starting = false;
                 if (!"OK".equals(result)) { releaseKeeper(); status = result; updateFloating(); notifyState(); return; }
@@ -186,7 +172,7 @@ public final class GuardService extends Service {
         updateFloating(); notifyState();
     }
     private void updateFloating() {
-        boolean show = enabled && !ending && !active && !starting && calibrationMatches(preferences().getString("confirmed", ""));
+        boolean show = enabled && !ending && !active && !starting;
         try {
             if (floating == null && show) floating = new FloatingControl(this,
                     () -> startService(new Intent(this, GuardService.class).setAction("START")));

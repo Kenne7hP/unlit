@@ -57,7 +57,6 @@ public final class PrivilegedGuard extends IGuard.Stub {
     @Override public synchronized String begin(boolean probe) { checkOwner(); return controller.begin(probe); }
     @Override public synchronized String heartbeat() { checkOwner(); return controller.heartbeat(); }
     @Override public synchronized String stop() { checkOwner(); return controller == null ? "未初始化" : controller.stop(); }
-    @Override public synchronized void setArmed(boolean armed) { checkOwner(); controller.arm(armed); }
     @Override public synchronized void destroy() {
         if (controller != null) controller.close();
         System.exit(0);

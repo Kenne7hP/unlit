@@ -5,5 +5,4 @@ interface IGuard {
     String begin(boolean probe) = 2;
     String heartbeat() = 3;
     String stop() = 4;
-    void setArmed(boolean armed) = 5;
 }

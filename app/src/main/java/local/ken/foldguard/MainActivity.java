@@ -20,42 +20,35 @@ import rikka.sui.Sui;
 public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView state, checks, badge;
-    private Button confirm, power, protect, setupToggle;
+    private Button power, protect, setupToggle;
     private LinearLayout setup;
     private int count;
-    private boolean singleScreen, offeredConfirmation;
+    private AlertDialog permissionReminder;
+    private boolean remindedThisVisit;
+    private final Runnable checkPermissionsOnOpen = this::showMissingPermissions;
     private final Runnable refresh = new Runnable() {
         @Override public void run() {
             boolean binder = Shizuku.pingBinder();
             boolean permission = binder && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
-            SharedPreferences prefs = getSharedPreferences("guard", MODE_PRIVATE);
-            boolean tested = GuardService.calibrationMatches(prefs.getString("probe", ""));
-            boolean verified = GuardService.calibrationMatches(prefs.getString("confirmed", ""));
             checks.setText((Sui.isSui() ? "Sui（root）：" : "Shizuku：") + (permission ? "已授权" : binder ? "待授权" : "未运行")
-                    + "\n持续运行权限：" + (Settings.canDrawOverlays(MainActivity.this) ? "已允许" : "待允许")
-                    + "\n手指触控验证：" + (verified ? "已由你确认" : tested ? "等待你确认" : "待测试"));
+                    + "\n悬浮窗：" + (Settings.canDrawOverlays(MainActivity.this) ? "已允许" : "待允许")
+                    + "\n通知：" + (notificationsAllowed() ? "已允许" : "待允许"));
             badge.setText(GuardService.active ? "●  保护中" : GuardService.starting ? "●  准备灭屏" : GuardService.enabled ? "●  服务就绪" : GuardService.connecting ? "●  正在连接" : "○  待启用");
             state.setText(GuardService.status);
             boolean running = GuardService.enabled || GuardService.connecting;
             power.setText(GuardService.connecting ? "取消启用" : GuardService.enabled ? "停止服务" : "启用服务");
-            power.setEnabled(running || (verified && permission && Settings.canDrawOverlays(MainActivity.this)));
+            power.setEnabled(running || (permission && Settings.canDrawOverlays(MainActivity.this)));
             styleButton(power, running ? 0xFFE6ECE8 : 0xFFB8F2D4, 0xFF142A30);
             power.setAlpha(power.isEnabled() ? 1f : 0.45f);
-            protect.setAlpha(GuardService.enabled && verified ? 1f : 0.45f);
+            protect.setAlpha(GuardService.enabled ? 1f : 0.45f);
             protect.setText(GuardService.active ? "恢复亮屏" : GuardService.starting ? "取消灭屏" : "立即灭屏");
-            protect.setEnabled(GuardService.enabled && verified);
-            confirm.setEnabled(tested && !GuardService.active && !GuardService.starting);
-            confirm.setAlpha(confirm.isEnabled() ? 1f : 0.45f);
-            if (tested && !verified && !GuardService.active && !GuardService.starting && !offeredConfirmation) {
-                offeredConfirmation = true;
-                confirmProbe();
-            }
+            protect.setEnabled(GuardService.enabled);
             handler.postDelayed(this, 750);
         }
     };
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
-        singleScreen = "TB321FU".equals(Build.MODEL);
+        boolean singleScreen = "TB321FU".equals(Build.MODEL) || "SM-G9860".equals(Build.MODEL);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xFFF3F5F2);
         scroll.setFillViewport(true);
@@ -113,16 +106,18 @@ public final class MainActivity extends Activity {
             setupToggle.setText(show ? "权限与触控检查  −" : "权限与触控检查  ＋");
         });
         setup = card(body, Color.WHITE, 20);
-        boolean verified = GuardService.calibrationMatches(getSharedPreferences("guard", MODE_PRIVATE).getString("confirmed", ""));
-        setup.setVisibility(verified ? View.GONE : View.VISIBLE);
-        setupToggle.setText(verified ? "权限与触控检查  ＋" : "权限与触控检查  −");
+        boolean permissionsReady = Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED && Settings.canDrawOverlays(this) && notificationsAllowed();
+        setup.setVisibility(permissionsReady ? View.GONE : View.VISIBLE);
+        setupToggle.setText(permissionsReady ? "权限与触控检查  ＋" : "权限与触控检查  −");
         checks = text(setup, "正在检查权限…");
         button(setup, Sui.isSui() ? "1. 授权 Sui" : "1. 授权 Shizuku", () -> {
             if (!Shizuku.pingBinder()) { Toast.makeText(this, "请先启动 Sui 或 Shizuku 权限服务", Toast.LENGTH_LONG).show(); return; }
             Shizuku.requestPermission(100);
         });
         button(setup, "2. 允许悬浮按钮", () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
-        text(setup, (singleScreen ? "本机为单屏，请完成本屏触控检查。" : "本机为双屏，请分别完成内外屏触控检查。")
+        button(setup, "3. 通知设置", () -> startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())));
+        text(setup, (singleScreen ? "可按需测试本屏触控。" : "可按需分别测试内外屏触控。")
                 + "使用 Unlit·息幕 时请停止 Extinguish 的活动控制。");
         TextView pad = text(setup, "触控测试区：点击或滑动\n事件计数：0");
         pad.setMinHeight(dp(132)); pad.setPadding(dp(16), dp(20), dp(16), dp(20));
@@ -133,39 +128,51 @@ public final class MainActivity extends Activity {
                 pad.setText("触控测试区：点击或滑动\n事件计数：" + (++count));
             return true;
         });
-        button(setup, "3. 亮屏独占测试（10 秒）", () -> {
-            offeredConfirmation = false;
-            getSharedPreferences("guard", MODE_PRIVATE).edit().remove("probe").remove("confirmed").apply();
-            action("PROBE");
-        });
-        confirm = button(setup, "4. 确认触控通过并启用", this::confirmProbe);
+        button(setup, "可选：亮屏触控测试（10 秒）", () -> action("PROBE"));
         button(setup, "添加快捷设置磁贴", () -> {
             getSystemService(StatusBarManager.class).requestAddTileService(
                     new ComponentName(this, GuardTile.class), getString(R.string.app_name), android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_guard),
                     getMainExecutor(), result -> { });
         });
-        text(setup, "若屏幕未恢复：按电源键锁屏，再按一次唤醒。\n固件或触控实现更新后需重新检查；仅调整界面不会清除既有确认。双击音量下键可能同时降低音量。");
+        text(setup, "若屏幕未恢复：按电源键锁屏，再按一次唤醒。\n双击音量下键可能同时降低音量。");
         TextView credit = text(setup, "");
         credit.setText(android.text.Html.fromHtml("致谢：<a href=\"https://github.com/Moderpach/Extinguish\">Extinguish · Moderpach</a><br>显示控制加载实现源自 Extinguish，遵循 GPL-3.0-or-later。", android.text.Html.FROM_HTML_MODE_LEGACY));
         credit.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
         credit.setTextSize(13);
         TextView footer = text(body, "UNLIT  /  " + BuildConfig.VERSION_NAME + "\n本地运行 · 无网络权限");
         footer.setGravity(Gravity.CENTER); footer.setTextSize(11); footer.setLetterSpacing(0.06f); footer.setPadding(0, dp(28), 0, dp(4));
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+    }
+    private boolean notificationsAllowed() {
+        return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                && getSystemService(NotificationManager.class).areNotificationsEnabled();
+    }
+    private void showMissingPermissions() {
+        if (remindedThisVisit || isFinishing()) return;
+
+        java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+        if (!Shizuku.pingBinder()) {
+            missing.add("启动 Shizuku 或 Sui");
+        } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            missing.add("允许 Unlit 使用 " + (Sui.isSui() ? "Sui" : "Shizuku"));
+        }
+        if (!Settings.canDrawOverlays(this)) missing.add("允许悬浮窗");
+        if (!notificationsAllowed()) missing.add("允许通知");
+        if (missing.isEmpty()) return;
+
+        remindedThisVisit = true;
+        permissionReminder = new AlertDialog.Builder(this)
+                .setTitle("Unlit 授权未完成")
+                .setMessage(String.join("\n", missing))
+                .setNegativeButton("稍后", null)
+                .setPositiveButton("查看权限", (dialog, which) -> {
+                    setup.setVisibility(View.VISIBLE);
+                    setupToggle.setText("权限与触控检查  −");
+                    setup.post(() -> setupToggle.requestRectangleOnScreen(
+                            new android.graphics.Rect(0, 0, setupToggle.getWidth(), setupToggle.getHeight()), false));
+                })
+                .show();
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private void confirmProbe() {
-        new AlertDialog.Builder(this)
-                .setTitle(singleScreen ? "本屏幕触控测试是否通过？" : "内外屏触控测试是否均通过？")
-                .setMessage("亮屏测试不会灭屏。只有测试期间手指点击、滑动和边缘手势均无效，结束后恢复正常，且双击音量下键能提前退出，才确认通过。"
-                        + (singleScreen ? "确认后启用服务并显示悬浮按钮。" : "内屏、外屏均须分别验证；确认后启用服务。"))
-                .setNegativeButton("未通过", (d, w) -> getSharedPreferences("guard", MODE_PRIVATE).edit().remove("confirmed").apply())
-                .setPositiveButton("确认通过并启用", (d, w) -> {
-                    getSharedPreferences("guard", MODE_PRIVATE).edit().putString("confirmed", GuardService.deviceKey()).apply();
-                    action("ENABLE");
-                }).show();
-    }
     private GradientDrawable shape(int color, int radius) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(color); background.setCornerRadius(dp(radius)); return background;
@@ -199,6 +206,22 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(this, GuardService.class).setAction(action);
         startForegroundService(intent);
     }
-    @Override protected void onResume() { super.onResume(); handler.post(refresh); }
-    @Override protected void onPause() { handler.removeCallbacks(refresh); super.onPause(); }
+    @Override protected void onResume() {
+        super.onResume();
+        handler.post(refresh);
+        handler.postDelayed(checkPermissionsOnOpen, 500);
+    }
+    @Override protected void onPause() {
+        handler.removeCallbacks(refresh);
+        handler.removeCallbacks(checkPermissionsOnOpen);
+        super.onPause();
+    }
+    @Override protected void onStop() {
+        if (permissionReminder != null) {
+            permissionReminder.dismiss();
+            permissionReminder = null;
+        }
+        remindedThisVisit = false;
+        super.onStop();
+    }
 }
